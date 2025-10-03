@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Water Sort Puzzle Solver — V1.67</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --accent:#4a90e2;
+    --danger:#d9534f;
+    --solve:#28a745;
+    --card:#ffffff;
+    --bg:#f0f2f7;
+    --from-color: #007bff; /* blue */
+    --to-color: #d9534f;   /* red */
+  }
+  body { font-family: Inter, Arial, sans-serif; background: var(--bg); padding: 16px; margin:0; color:#222; }
+  h1 { text-align: center; margin: 6px 0 18px; font-size: 1.5rem; }
+
+  /* Controls container */
+  #controls { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-bottom:12px; }
+  .control-group {
+    background: var(--card); padding:12px; border-radius:10px; box-shadow: 0 3px 8px rgba(0,0,0,0.06);
+    display:flex; flex-direction:column; gap:8px; min-width:220px;
+  }
+  .control-group h3 { margin:0; font-size:1rem; color:#333; text-align:center; }
+
+  input[type=text], select, button {
+    padding:7px 10px; border-radius:8px; border:1px solid #d0d6dd; font-size:0.95rem;
+  }
+  button { background: var(--accent); color:white; border: none; cursor:pointer; }
+  button:hover { filter:brightness(.95); }
+  button.small { padding:6px 10px; font-size:0.9rem; }
+  button.danger { background: var(--danger); color:white; }
+  button.solve { background: var(--solve); font-weight:700; padding:12px 26px; border-radius:10px; font-size:1.05rem; }
+  button.solve:hover { filter:brightness(.95); }
+
+  /* Vials (input grid) */
+  #vials {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(96px, 1fr));
+    gap: 14px;
+    justify-items: center;
+    margin: 6px 8px 12px;
+    max-width: calc(6 * 120px + 5 * 14px);
+  }
+  .vial-container { display:flex; flex-direction:column; align-items:center; width:100%; max-width:120px; }
+  .vial-label { font-weight:600; margin-bottom:8px; color:#333; text-align:center; }
+  .vial {
+    width:100%;
+    aspect-ratio: 1/2;
+    border-radius:10px;
+    border:2px solid #333;
+    padding:8px;
+    box-sizing:border-box;
+    background:var(--card);
+    display:flex;
+    flex-direction:column-reverse;
+    gap:6px;
+  }
+  select.slot { width:100%; flex:1; font-size:0.85rem; border-radius:8px; padding-left:6px; }
+
+  .last-vial-controls {
+    margin-top:8px;
+    display:flex;
+    gap:8px;
+    justify-content:center;
+    width:100%;
+  }
+  .last-vial-controls button { padding:6px 10px; font-size:0.9rem; border-radius:8px; }
+
+  #globalVialControls { display:flex; justify-content:center; gap:8px; margin-bottom: 14px; }
+
+  #solveContainer { text-align:center; margin: 22px 0 8px; }
+
+  #output { margin-top: 10px; white-space: pre-wrap; background: var(--card); padding: 12px; border-radius:10px;
+           border:1px solid #e2e6ea; box-shadow:0 2px 6px rgba(0,0,0,0.04); min-height:48px; }
+
+  #steps { margin-top: 14px; }
+
+  .step { margin-bottom: 20px; padding:10px; background: var(--card); border-radius:10px;
+          border:1px solid #ddd; }
+  .step h4 { margin:0 0 8px; font-size:1rem; color:#333; text-align:center; }
+
+  /* Steps grid: fixed columns (6), centered, matching input tube size */
+  .step-vials { display: grid; grid-template-columns: repeat(6, 120px); gap:12px; justify-content: center;}
+  .tube-block { display:flex; flex-direction:column; align-items:center; width:78px; box-sizing:border-box; }
+  .step-label { text-align:center; margin-bottom:6px; font-weight:600; color:#333; }
+
+  /* step-vial matches .vial (same width and aspect ratio) */
+  .step-vial {
+    width:90px;
+    aspect-ratio: 1/2;
+    border:3px solid #333;
+    border-radius:8px;
+    padding:2px;
+    max-height:145px;
+    display:flex;
+    flex-direction:column-reverse;
+    justify-content:flex-start;
+    background:#fafafa;
+    box-sizing:border-box;
+    overflow:hidden;
+  }
+  .step-slot { border:1px solid #bbb; margin:2px 0; text-align:center; border-radius:6px; padding:6px 4px; font-size:0.95rem; width:100%; box-sizing:border-box; }
+
+  .step-slot.hidden { background: repeating-linear-gradient(45deg, #ddd, #ddd 6px, #fff 6px, #fff 12px); font-weight:700; }
+
+  @media (max-width: 1100px) {
+    #vials { grid-template-columns: repeat(4, 120px); max-width: calc(4 * 120px + 3 * 14px); }
+    .step-vials { grid-template-columns: repeat(4, 120px); }
+  }
+  @media (max-width: 700px) {
+    #vials { grid-template-columns: repeat(2, 120px); max-width: calc(2 * 120px + 1 * 14px); }
+    .step-vials { grid-template-columns: repeat(2, 120px); }
+    .vial { aspect-ratio: 2/5; padding:6px; }
+    .step-vial { width:120px; aspect-ratio: 2/5; }
+    .step-slot { padding:5px 2px; font-size:0.85rem; }
+  }
+</style>
+</head>
+<body>
+  <h1>Water Sort Puzzle Solver</h1>
+
+  <div id="controls">
+    <!-- Colors group -->
+    <div class="control-group" id="colorsGroup">
+      <h3>Colors</h3>
+      <input type="text" id="colorInput" placeholder="e.g. Red">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="small" onclick="addColor()">Add</button>
+      </div>
+      <select id="colorList" size="4" style="min-height:80px"></select>
+      <button class="danger small" onclick="deleteColor()">Delete Color</button>
+      <button class="small" onclick="fillHiddenRandom()">Fill Hidden Randomly</button>
+    </div>
+
+    <!-- Save / Load group -->
+    <div class="control-group" id="saveGroup">
+      <h3>Save / Load</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="small" onclick="saveStatePrompt()">Save</button>
+        <button class="small" onclick="exportAll()">Export</button>
+        <button class="small" onclick="importPrompt()">Import</button>
+      </div>
+      <select id="savedStates" size="4" style="min-height:90px"></select>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="small" onclick="loadSelectedState()">Load</button>
+        <button class="danger small" onclick="deleteSelectedState()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global add / delete vial controls -->
+  <div id="globalVialControls">
+    <button class="small" onclick="addVial()">Add Tube</button>
+    <button class="small danger" onclick="deleteLastVial()">Delete Tube</button>
+  </div>
+
+  <!-- Vials grid -->
+  <div id="vials"></div>
+
+  <!-- Solve button (still present; show-steps will display automatically) -->
+  <div id="solveContainer">
+    <button class="solve" onclick="solvePuzzle()">Solve Puzzle</button>
+  </div>
+
+  <div id="output">Output will appear here.</div>
+  <div id="steps"></div>
+
+<script>
+/* ======= Configuration ======= */
+const MAX_HEIGHT = 4;
+const FROM_COLOR = getComputedStyle(document.documentElement).getPropertyValue('--from-color') || '#007bff';
+const TO_COLOR   = getComputedStyle(document.documentElement).getPropertyValue('--to-color')   || '#d9534f';
+/* ============================= */
+
+/* App state */
+let vialCount = 0;
+let colors = ["?"]; // always include "?" by default
+const vialsContainer = document.getElementById("vials");
+const colorListSelect = document.getElementById("colorList");
+const savedStatesSelect = document.getElementById("savedStates");
+const outputDiv = document.getElementById("output");
+const stepsDiv = document.getElementById("steps");
+let lastSolution = null;
+let lastInitialState = null;
+
+/* -------------------------
+   Color management
+   ------------------------- */
+function addColor() {
+  const name = document.getElementById("colorInput").value.trim();
+  if (!name) return alert("Enter a color name.");
+  if (name === "?") return alert("Cannot add reserved '?' color.");
+  if (colors.includes(name)) return alert("Color already exists.");
+  colors.push(name);
+  updateColorList();
+  updateVialDropdowns();
+  document.getElementById("colorInput").value = "";
+  updateLastVialControls();
+}
+function deleteColor() {
+  const selected = colorListSelect.value;
+  if (!selected) return alert("Select a color to delete.");
+  if (selected === "?") return alert("Cannot delete '?' color.");
+  if (!confirm(`Delete color "${selected}"?`)) return;
+  colors = colors.filter(c => c !== selected);
+  updateColorList();
+  updateVialDropdowns();
+  updateLastVialControls();
+}
+function updateColorList() {
+  // ensure "?" is present at front
+  if (!colors.includes("?")) colors = ["?"].concat(colors);
+  // unique
+  colors = Array.from(new Set(colors));
+  colorListSelect.innerHTML = "";
+  for (const c of colors) {
+    const opt = document.createElement("option");
+    opt.value = c; opt.text = c;
+    colorListSelect.add(opt);
+  }
+}
+function updateVialDropdowns() {
+  // rebuild options preserving previous values
+  document.querySelectorAll(".vial select.slot").forEach(sel => {
+    const prev = sel.value || "";
+    sel.innerHTML = "";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = ""; emptyOpt.text = "-";
+    sel.add(emptyOpt);
+    for (const c of colors) {
+      const o = document.createElement("option"); o.value = c; o.text = c;
+      sel.add(o);
+    }
+    sel.value = (prev && colors.includes(prev)) ? prev : "";
+  });
+}
+
+/* -------------------------
+   Fill hidden (?) randomly
+   ------------------------- */
+function fillHiddenRandom() {
+  const allSlots = Array.from(document.querySelectorAll(".vial select.slot"));
+  const counts = {};
+  let unknownSlots = [];
+  allSlots.forEach(sel => {
+    const v = sel.value;
+    if (!v) return;
+    if (v === "?") unknownSlots.push(sel);
+    else counts[v] = (counts[v] || 0) + 1;
+  });
+
+  const needed = {};
+  let totalNeeded = 0;
+  for (const c of colors) {
+    if (c === "?") continue;
+    const have = counts[c] || 0;
+    if (have > MAX_HEIGHT) {
+      alert(`There are already ${have} units of color "${c}" — more than capacity ${MAX_HEIGHT}. Fix input first.`);
+      return;
+    }
+    needed[c] = MAX_HEIGHT - have;
+    totalNeeded += needed[c];
+  }
+
+  if (totalNeeded !== unknownSlots.length) {
+    alert(`Mismatch: ${unknownSlots.length} hidden slots but ${totalNeeded} color units are required. Fix the visible counts first.\nPlease check if you have added any more colors than needed.\nDelete the unnecessary color(s) before trying again by selecting the color from the list and clicking Delete Color.`);
+    return;
+  }
+
+  const pool = [];
+  for (const [c, n] of Object.entries(needed)) for (let i=0;i<n;i++) pool.push(c);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  unknownSlots.forEach((sel, idx) => sel.value = pool[idx]);
+  alert("Hidden slots filled randomly (respecting 4-per-color).");
+}
+
+/* -------------------------
+   Vial (Tube) management
+   ------------------------- */
+function addVial() {
+  vialCount++;
+  const container = document.createElement("div");
+  container.className = "vial-container";
+
+  const label = document.createElement("div");
+  label.className = "vial-label";
+  label.innerText = `Tube ${vialCount}`;
+  container.appendChild(label);
+
+  const vial = document.createElement("div");
+  vial.className = "vial";
+  for (let i = 0; i < MAX_HEIGHT; i++) {
+    const sel = document.createElement("select");
+    sel.className = "slot";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = ""; emptyOpt.text = "-";
+    sel.add(emptyOpt);
+    for (const c of colors) {
+      const o = document.createElement("option");
+      o.value = c; o.text = c;
+      sel.add(o);
+    }
+    vial.appendChild(sel);
+  }
+  container.appendChild(vial);
+  vialsContainer.appendChild(container);
+
+  updateLastVialControls();
+}
+
+function deleteLastVial() {
+  if (!vialsContainer.lastChild) return;
+  vialsContainer.removeChild(vialsContainer.lastChild);
+  vialCount = Math.max(0, vialCount - 1);
+  updateLastVialControls();
+}
+
+function updateLastVialControls() {
+  document.querySelectorAll('.last-vial-controls').forEach(n => n.remove());
+  if (vialsContainer.children.length === 0) return;
+
+  const lastContainer = vialsContainer.lastElementChild;
+  const controls = document.createElement('div');
+  controls.className = 'last-vial-controls';
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'small';
+  addBtn.type = 'button';
+  addBtn.textContent = '+ Add Tube';
+  addBtn.onclick = () => addVial();
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'small danger';
+  delBtn.type = 'button';
+  delBtn.textContent = '− Delete Tube';
+  delBtn.onclick = () => {
+    if (!confirm('Delete the last tube?')) return;
+    deleteLastVial();
+  };
+
+  controls.appendChild(addBtn);
+  controls.appendChild(delBtn);
+  lastContainer.appendChild(controls);
+}
+
+/* -------------------------
+   State reading / saving
+   ------------------------- */
+function readStateForSolver() {
+  return Array.from(document.querySelectorAll(".vial")).map(vial => {
+    const slots = Array.from(vial.querySelectorAll("select.slot")).map(s => s.value).filter(v => v);
+    return slots;
+  });
+}
+
+function readStateRaw() {
+  return Array.from(document.querySelectorAll(".vial")).map(vial => {
+    const slots = Array.from(vial.querySelectorAll("select.slot")).map(s => s.value || "");
+    return slots;
+  });
+}
+
+/* -------------------------
+   Save / Load (localStorage)
+   ------------------------- */
+function saveStatePrompt() {
+  const name = prompt("Enter a name for this state:");
+  if (!name) return;
+  const raw = readStateRaw();
+  const all = JSON.parse(localStorage.getItem("waterSortStates") || "{}");
+  const colorsToSave = Array.from(new Set(colors));
+  if (!colorsToSave.includes("?")) colorsToSave.unshift("?");
+  all[name] = { vials: raw, colors: colorsToSave };
+  localStorage.setItem("waterSortStates", JSON.stringify(all));
+  updateSavedStatesList();
+  alert("Saved as: " + name);
+}
+
+function updateSavedStatesList() {
+  const all = JSON.parse(localStorage.getItem("waterSortStates") || "{}");
+  savedStatesSelect.innerHTML = "";
+  for (const name of Object.keys(all)) {
+    const o = document.createElement("option");
+    o.value = name; o.text = name;
+    savedStatesSelect.add(o);
+  }
+}
+
+function loadSelectedState() {
+  const name = savedStatesSelect.value;
+  if (!name) return alert("Select a state to load.");
+  const all = JSON.parse(localStorage.getItem("waterSortStates") || "{}");
+  const data = all[name];
+  if (!data) return alert("Saved state not found.");
+
+  colors = Array.isArray(data.colors) ? Array.from(new Set(["?"].concat(data.colors))) : ["?"];
+  updateColorList();
+
+  vialsContainer.innerHTML = "";
+  vialCount = 0;
+  const rawVials = Array.isArray(data.vials) ? data.vials : [];
+  rawVials.forEach(rawSlots => {
+    addVial();
+    const lastVial = vialsContainer.lastChild.querySelector(".vial");
+    const selects = Array.from(lastVial.querySelectorAll("select.slot"));
+    for (let i = 0; i < MAX_HEIGHT; i++) selects[i].value = rawSlots[i] || "";
+  });
+
+  updateVialDropdowns();
+  updateLastVialControls();
+  alert("Loaded: " + name);
+}
+
+function deleteSelectedState() {
+  const name = savedStatesSelect.value;
+  if (!name) return alert("Select a state to delete.");
+  if (!confirm(`Delete saved state "${name}"?`)) return;
+  const all = JSON.parse(localStorage.getItem("waterSortStates") || "{}");
+  delete all[name];
+  localStorage.setItem("waterSortStates", JSON.stringify(all));
+  updateSavedStatesList();
+}
+
+/* Export / Import helpers */
+function exportAll() {
+  const all = JSON.parse(localStorage.getItem("waterSortStates") || "{}");
+  if (!all || Object.keys(all).length === 0) {
+    alert("No saved states to export.");
+    return;
+  }
+  const blob = new Blob([JSON.stringify(all, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'waterSortStates.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importPrompt() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (!imported || typeof imported !== 'object') throw new Error('Invalid file format.');
+        const existing = JSON.parse(localStorage.getItem('waterSortStates') || '{}');
+        if (Object.keys(existing).length > 0) {
+          const replace = confirm('Replace existing saved states with imported ones? OK = replace, Cancel = merge.');
+          if (replace) localStorage.setItem('waterSortStates', JSON.stringify(imported));
+          else {
+            const merged = Object.assign({}, existing, imported);
+            localStorage.setItem('waterSortStates', JSON.stringify(merged));
+          }
+        } else {
+          localStorage.setItem('waterSortStates', JSON.stringify(imported));
+        }
+        updateSavedStatesList();
+        alert('Import successful.');
+      } catch (err) {
+        alert('Failed to import: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+/* -------------------------
+   Solver logic (DFS) with change:
+   - avoid pouring from uniform tube into empty tube
+   ------------------------- */
+function isSolvedVial(vial) { return vial.length === MAX_HEIGHT && (new Set(vial).size === 1); }
+function isSolved(state) {
+  const seen = new Set();
+  for (const v of state) {
+    if (v.length === 0) continue;
+    if (v.length !== MAX_HEIGHT) return false;
+    if ((new Set(v)).size !== 1) return false;
+    if (seen.has(v[0])) return false;
+    seen.add(v[0]);
+  }
+  return true;
+}
+
+function pour(vialFrom, vialTo) {
+  if (!vialFrom.length || vialTo.length >= MAX_HEIGHT) return null;
+  // NEW: avoid pouring from a uniform tube into an empty tube (useless)
+  if (vialTo.length === 0 && (new Set(vialFrom).size === 1)) return null;
+  if (isSolvedVial(vialFrom)) return null;
+  const color = vialFrom[vialFrom.length - 1];
+  if (vialTo.length && vialTo[vialTo.length - 1] !== color) return null;
+  let count = 1;
+  for (let i = vialFrom.length - 2; i >= 0; i--) {
+    if (vialFrom[i] === color) count++; else break;
+  }
+  const space = MAX_HEIGHT - vialTo.length;
+  const moveCount = Math.min(count, space);
+  return [vialFrom.slice(0, -moveCount), vialTo.concat(vialFrom.slice(-moveCount))];
+}
+
+function scoreMove(state, i, j, newFrom, newTo) {
+  let score = 0;
+  if (newTo.length && (new Set(newTo).size === 1)) {
+    score += 2;
+    if (newTo.length === MAX_HEIGHT) score += 5;
+  }
+  if (state[j].length === 0) score -= 1;
+  return score;
+}
+
+function solve(initial) {
+  const visited = new Set();
+  function serialize(s) { return JSON.stringify(s); }
+  function dfs(state, path) {
+    if (isSolved(state)) return path;
+    const key = serialize(state);
+    if (visited.has(key)) return null;
+    visited.add(key);
+
+    const moves = [];
+    for (let i = 0; i < state.length; i++) {
+      for (let j = 0; j < state.length; j++) {
+        if (i === j) continue;
+        const res = pour(state[i], state[j]);
+        if (res) {
+          const [newFrom, newTo] = res;
+          const newState = state.map((v, idx) => idx === i ? newFrom : idx === j ? newTo : v);
+          moves.push([i, j, newState, newFrom, newTo]);
+        }
+      }
+    }
+
+    moves.sort((a, b) => scoreMove(state, b[0], b[1], b[3], b[4]) - scoreMove(state, a[0], a[1], a[3], a[4]));
+
+    for (const [i, j, newState] of moves) {
+      const sol = dfs(newState, path.concat([[i, j]]));
+      if (sol) return sol;
+    }
+    return null;
+  }
+  return dfs(initial, []);
+}
+
+/* Apply / shorten moves */
+function applyMove(state, move) {
+  const [i, j] = move;
+  const res = pour(state[i], state[j]);
+  if (!res) throw new Error("Invalid move");
+  const [newFrom, newTo] = res;
+  return state.map((v, idx) => idx === i ? newFrom : idx === j ? newTo : v);
+}
+function applyMoves(state, moves) { for (const m of moves) state = applyMove(state, m); return state; }
+function shortenMoves(initialState, moves) {
+  let shortened = moves.slice();
+  let i = 0;
+  while (i < shortened.length) {
+    const test = shortened.slice(0, i).concat(shortened.slice(i + 1));
+    try {
+      if (isSolved(applyMoves(initialState, test))) { shortened = test; continue; }
+    } catch {}
+    i++;
+  }
+  return shortened;
+}
+
+/* -------------------------
+   Validation before solving
+   ------------------------- */
+function validateInitialState() {
+  const raw = readStateRaw(); // array of arrays of slot values ("" for empty)
+  const flat = raw.flat();
+
+  // Check for "?" hidden slots
+  const hasHidden = flat.includes("?");
+
+  if (hasHidden) {
+    // warn the user and allow them to cancel
+    const proceed = confirm(
+      "Hidden slots (?) detected. It's recommended to use 'Fill Hidden Randomly' before solving.\n\n" +
+      "Press OK to continue anyway, or Cancel to stop and fill hidden slots."
+    );
+    if (!proceed) return { ok: false, reason: "hidden" };
+    // If user chose to proceed despite hidden slots, skip the strict color count check
+    return { ok: true, skippedCountCheck: true };
+  }
+
+  // No hidden slots: check counts of each used color
+  const used = flat.filter(v => v); // excludes "" (empty)
+  const usedSet = Array.from(new Set(used));
+  const mismatches = [];
+  for (const color of usedSet) {
+    // ignore placeholder "?"
+    if (color === "?") continue;
+    const count = used.filter(v => v === color).length;
+    if (count !== MAX_HEIGHT) {
+      mismatches.push(`${color}: ${count} (should be ${MAX_HEIGHT})`);
+    }
+  }
+
+  if (mismatches.length > 0) {
+    alert(
+      "Color count mismatch detected — solver will not run.\n\n" +
+      "Fix the following and try again:\n" +
+      mismatches.join("\n") +
+      "\n\nEach color must appear exactly " + MAX_HEIGHT + " times."
+    );
+    return { ok: false, reason: "counts", details: mismatches };
+  }
+
+  // All checks OK
+  return { ok: true, skippedCountCheck: false };
+}
+
+/* -------------------------
+   Solve button handler & steps
+   - Show Steps automatically (no extra button needed)
+   - Steps highlighting: color source (FROM_COLOR) and target (TO_COLOR)
+   - Validation prior to solving
+   ------------------------- */
+function solvePuzzle() {
+  const validation = validateInitialState();
+  if (!validation.ok) return; // user cancelled or mismatch detected
+
+  const state = readStateForSolver();
+  outputDiv.innerText = "Solving... (may take a while for hard puzzles)";
+  stepsDiv.innerHTML = "";
+  lastSolution = null;
+  lastInitialState = null;
+  setTimeout(() => {
+    const sol = solve(state);
+    if (!sol) {
+      outputDiv.innerText = "No solution found.";
+      return;
+    }
+    const shortened = shortenMoves(state, sol);
+    lastSolution = shortened;
+    lastInitialState = state;
+    outputDiv.innerText = "Solved! Moves:\n" + shortened.map(m => `Pour from Tube ${m[0] + 1} → Tube ${m[1] + 1}`).join("\n");
+    // show steps immediately (default)
+    showSteps();
+  }, 30);
+}
+
+/* step visualization with colored borders and text */
+function showSteps() {
+  if (!lastSolution || !lastInitialState) return;
+  stepsDiv.innerHTML = "";
+  let cur = JSON.parse(JSON.stringify(lastInitialState));
+  // initial state (no highlights)
+  renderStep(cur, 0, "Initial", null, null);
+  lastSolution.forEach((move, idx) => {
+    cur = applyMove(cur, move);
+    renderStep(cur, idx + 1, `Step ${idx + 1}: Pour Tube ${move[0] + 1} → Tube ${move[1] + 1}`, move[0], move[1]);
+  });
+}
+function renderStep(state, num, label, fromIdx, toIdx) {
+  const step = document.createElement("div");
+  step.className = "step";
+  const h = document.createElement("h4");
+
+  // build label with colored spans when from/to present
+  if (fromIdx === null || toIdx === null) {
+    h.textContent = label;
+  } else {
+    // colored text: source blue, target red
+    const spanFrom = `<span style="color:${FROM_COLOR}; font-weight:700">Tube ${fromIdx + 1}</span>`;
+    const spanTo   = `<span style="color:${TO_COLOR}; font-weight:700">Tube ${toIdx + 1}</span>`;
+    // replace numbers in label (which is "Step N: Pour Tube X → Tube Y")
+    const prefix = label.split(':')[0] + ': Pour ';
+    h.innerHTML = `${prefix}from ${spanFrom} → ${spanTo}`;
+  }
+  step.appendChild(h);
+
+  const cont = document.createElement("div");
+  cont.className = "step-vials";
+  state.forEach((vial, idx) => {
+    const block = document.createElement("div");
+    block.className = "tube-block";
+
+    const lab = document.createElement("div");
+    lab.className = "step-label";
+    lab.textContent = `Tube ${idx + 1}`;
+    block.appendChild(lab);
+
+    const d = document.createElement("div");
+    d.className = "step-vial";
+
+    // highlight border if this is source or target
+    if (fromIdx !== null && idx === fromIdx) d.style.borderColor = FROM_COLOR;
+    else if (toIdx !== null && idx === toIdx) d.style.borderColor = TO_COLOR;
+    else d.style.borderColor = "#333";
+
+    for (const c of vial) {
+      const slot = document.createElement("div");
+      slot.className = "step-slot";
+      slot.textContent = c;
+      if (c === "?") slot.classList.add("hidden");
+      d.appendChild(slot);
+    }
+
+    block.appendChild(d);
+    cont.appendChild(block);
+  });
+
+  step.appendChild(cont);
+  stepsDiv.appendChild(step);
+}
+
+/* -------------------------
+   Init
+   ------------------------- */
+updateSavedStatesList();
+updateColorList();
+updateVialDropdowns();
+updateLastVialControls();
+</script>
+</body>
+</html>
